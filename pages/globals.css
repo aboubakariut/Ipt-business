@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-jakarta: "Plus Jakarta Sans", sans-serif;
+  --font-inter: "Inter", sans-serif;
+}
+
+html, body {
+  background-color: #FAFAF8;
+  color: #161622;
+  font-family: var(--font-inter);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Accessibilité : focus clavier toujours visible */
+:focus-visible {
+  outline: 2px solid #FF6B35;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Scrollbar discrète */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9D9E3;
+  border-radius: 999px;
+}
