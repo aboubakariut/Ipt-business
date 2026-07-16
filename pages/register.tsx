@@ -107,8 +107,8 @@ export default function PageInscription() {
           id="motDePasse"
           label="Mot de passe"
           type="password"
-          placeholder="6 caractères minimum"
-          minLength={6}
+          placeholder="8 caractères min., avec au moins 1 lettre et 1 chiffre"
+          minLength={8}
           value={form.motDePasse}
           onChange={(e) => setForm({ ...form, motDePasse: e.target.value })}
           required

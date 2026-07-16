@@ -164,6 +164,12 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     await Promise.all([
       prisma.user.findUnique({ where: { id: userId } }),
       prisma.client.count({ where: { userId } }),
+      // ⚠️ Hypothèse : le CA "de ce mois" = factures marquées PAYEE dont la
+      // date de CRÉATION tombe ce mois-ci (pas la date de paiement, qui
+      // n'existe pas dans le schéma actuel). Si une facture créée en juin
+      // est payée en juillet, elle compte dans le CA de juin, pas juillet.
+      // Si ce n'est pas le comportement voulu, ajoute un champ `payeeLe`
+      // au modèle Facture et filtre dessus à la place de `createdAt`.
       prisma.facture.findMany({
         where: { userId, statut: "PAYEE", createdAt: { gte: debutMois } }
       }),
