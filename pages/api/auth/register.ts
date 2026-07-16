@@ -76,8 +76,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Filet de sécurité en cas de double soumission simultanée :
     // la contrainte unique (email ou slugBoutique) peut être violée
     // entre le "findUnique" et le "create" ci-dessus.
-    if (erreur instanceof Prisma.PrismaClientKnownRequestError && erreur.code === "P2002") {
-      return res.status(409).json({ erreur: "Un compte existe déjà avec ces informations" });
+    if (erreur instanceof Prisma.PrismaClientKnownRequestError) {
+      if (erreur.code === "P2002") {
+        return res.status(409).json({ erreur: "Un compte existe déjà avec ces informations" });
+      }
+
+      // Table absente = le schéma n'a jamais été poussé vers la base
+      // (il manque un `npx prisma db push` côté déploiement).
+      if (erreur.code === "P2021" || erreur.code === "P2010") {
+        console.error(
+          "[BD] Table manquante — as-tu lancé `npx prisma db push` sur la base de production ?",
+          erreur
+        );
+        return res.status(503).json({
+          erreur: "La base de données n'est pas encore initialisée (tables manquantes)."
+        });
+      }
+    }
+
+    // Connexion à la base impossible (mauvaise DATABASE_URL, base hors-ligne,
+    // certificat SSL requis manquant, etc.)
+    if (erreur instanceof Prisma.PrismaClientInitializationError) {
+      console.error("[BD] Connexion impossible — vérifie DATABASE_URL:", erreur.message);
+      return res.status(503).json({
+        erreur: "Impossible de se connecter à la base de données. Réessaie dans un instant."
+      });
     }
 
     console.error("Erreur inscription:", erreur);
