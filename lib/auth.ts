@@ -2,6 +2,12 @@ import { type NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { limiterDebit, recupererIp } from "./rate-limit";
+
+// Message volontairement identique dans tous les cas d'échec de connexion,
+// pour ne jamais révéler si un email est associé à un compte existant
+// (protection contre l'énumération de comptes).
+const MESSAGE_ERREUR_GENERIQUE = "Email ou mot de passe incorrect";
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -15,26 +21,37 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         motDePasse: { label: "Mot de passe", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.motDePasse) {
-          throw new Error("Email et mot de passe requis");
+          throw new Error(MESSAGE_ERREUR_GENERIQUE);
+        }
+
+        const emailNormalise = credentials.email.toLowerCase().trim();
+
+        // Limite anti brute-force : par IP ET par email ciblé, pour bloquer
+        // aussi bien le "spray" sur beaucoup de comptes que l'acharnement
+        // sur un seul compte depuis plusieurs IP.
+        const ip = recupererIp(req as any);
+        const autoriseParIp = limiterDebit(`login:ip:${ip}`, 10, 10 * 60 * 1000);
+        const autoriseParEmail = limiterDebit(`login:email:${emailNormalise}`, 5, 10 * 60 * 1000);
+
+        if (!autoriseParIp || !autoriseParEmail) {
+          throw new Error("Trop de tentatives, réessaie dans quelques minutes");
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email.toLowerCase().trim() }
+          where: { email: emailNormalise }
         });
 
-        if (!user) {
-          throw new Error("Aucun compte associé à cet email");
-        }
+        // On calcule toujours le bcrypt.compare, même si l'utilisateur n'existe
+        // pas, avec un hash factice : ça évite qu'un attaquant distingue les
+        // deux cas via le temps de réponse (timing attack).
+        const hashComparaison =
+          user?.motDePasseHash ?? "$2a$10$CwTycUXWue0Thq9StjUM0uJ8Q6VJXhLm7C6zqNwZzO6dnCkGrO8Xy";
+        const motDePasseValide = await bcrypt.compare(credentials.motDePasse, hashComparaison);
 
-        const motDePasseValide = await bcrypt.compare(
-          credentials.motDePasse,
-          user.motDePasseHash
-        );
-
-        if (!motDePasseValide) {
-          throw new Error("Mot de passe incorrect");
+        if (!user || !motDePasseValide) {
+          throw new Error(MESSAGE_ERREUR_GENERIQUE);
         }
 
         return {
